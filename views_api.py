@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -28,6 +29,7 @@ from .models import CreateGerty, Gerty
 from .rendering import render_screen
 
 gerty_api_router = APIRouter()
+BLOCK_EXPLORER_IMAGE = Path(__file__).parent / "static/blocks.png"
 
 
 @gerty_api_router.get("/api/v1/gerty", status_code=HTTPStatus.OK)
@@ -104,6 +106,16 @@ async def api_gerty_satoshi():
     return await get_satoshi()
 
 
+@gerty_api_router.get("/api/v1/gerty/block-explorer", name="gerty_block_explorer")
+async def api_gerty_block_explorer():
+    """Return the bundled 960x540 block explorer rendering example."""
+    return Response(
+        BLOCK_EXPLORER_IMAGE.read_bytes(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @gerty_api_router.get("/api/v1/gerty/images/{revision}.png", name="gerty_image")
 async def api_gerty_image(revision: str):
     snapshot = image_cache.get(revision)
@@ -148,9 +160,12 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
                     503, "Screen data temporarily unavailable."
                 ) from exc
             updated = datetime.now(timezone.utc) + timedelta(hours=utc_offset)
-            png = await asyncio.to_thread(
-                render_screen, data, slug, updated.strftime("%H:%M")
-            )
+            if slug == "block_explorer":
+                png = BLOCK_EXPLORER_IMAGE.read_bytes()
+            else:
+                png = await asyncio.to_thread(
+                    render_screen, data, slug, updated.strftime("%H:%M")
+                )
             snapshot = image_cache.put(key, png, refresh)
     return Response(
         content=json.dumps(

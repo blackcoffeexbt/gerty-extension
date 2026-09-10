@@ -237,6 +237,13 @@
           val="xs"
           label="URL Checker"
         ></q-checkbox>
+        <q-checkbox
+          class="q-pl-md"
+          size="xs"
+          v-model="formDialog.data.display_preferences.block_explorer"
+          val="xs"
+          label="Block explorer"
+        ></q-checkbox>
         <br />
         <q-select
           v-if="formDialog.data.display_preferences.fun_exchange_market_rate"
@@ -420,6 +427,7 @@
               fun_exchange_market_rate: false,
               dashboard_onchain: false,
               mempool_recommended_fees: false,
+              block_explorer: false,
               dashboard_mining: false,
               lightning_dashboard: false,
               onchain: false,
@@ -558,6 +566,7 @@
           this.formDialog.data.display_preferences.dashboard_onchain ||
           this.formDialog.data.display_preferences.dashboard_onchain ||
           this.formDialog.data.display_preferences.lightning_dashboard ||
+          this.formDialog.data.display_preferences.block_explorer ||
           this.formDialog.data.display_preferences.url_checker
         ) {
           this.formDialog.data.type = 'Gerty'

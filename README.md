@@ -75,3 +75,6 @@ interval and `next_page`; the initial gerty-v3 test firmware clamps intervals to
 300 seconds and does not yet rotate pages. For server-quantized images, disable
 firmware dithering. Future display profiles can separate dimensions and palette
 from the shared screen data; only the 960 × 540 e-paper profile is enabled today.
+
+The example endpoint `GET /gerty/api/v1/gerty/block-explorer` returns the bundled
+960 × 540 block explorer PNG at `static/blocks.png`.

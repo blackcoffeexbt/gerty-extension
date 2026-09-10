@@ -126,3 +126,27 @@ def test_manifest_and_image_routes(monkeypatch):
             assert (await client.get(manifest["image_url"])).status_code == 410
 
     asyncio.run(check())
+
+
+def test_block_explorer_example_endpoint():
+    import asyncio
+
+    import httpx
+    from fastapi import FastAPI
+
+    from .. import views_api
+
+    app = FastAPI()
+    app.include_router(views_api.gerty_api_router, prefix="/gerty")
+
+    async def check():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/gerty/api/v1/gerty/block-explorer")
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "image/png"
+            image = Image.open(BytesIO(response.content))
+            assert image.size == (960, 540)
+
+    asyncio.run(check())
