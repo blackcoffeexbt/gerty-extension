@@ -31,3 +31,47 @@ What does Gerty show?
 - Create an LNbits wallet and enable the Gerty extension
 - Create a new Gerty and configure your Gerty options
 - Click the smiley face icon next to your Gerty to open your Gerty dashboard.
+
+## Image display API
+
+`GET /gerty/api/v1/gerty/pages/{id}` returns page zero. Append `/{page}`
+for another zero-based enabled page. The old text-area response is replaced by:
+
+```json
+{
+  "schema_version": 1,
+  "image_url": "https://your-lnbits/gerty/api/v1/gerty/images/REVISION.png",
+  "image_revision": "REVISION",
+  "refresh_seconds": 300,
+  "page": 0,
+  "page_count": 8,
+  "next_page": 1
+}
+```
+
+Download `image_url`, display the PNG, sleep for `refresh_seconds`, then request
+`next_page`. On HTTP 410 from an image URL, fetch the manifest again. On data or
+network errors, retain the current display and retry. URLs use the request's
+origin: configure LNbits/proxy forwarding correctly and use a hostname the device
+can reach (not localhost). Treat device URLs as private bearer links because
+images may contain wallet balances.
+
+Images are 960 × 540 landscape, non-interlaced 8-bit grayscale PNGs quantized to
+16 levels. The renderer uses Proxima Nova Regular from `fonts/ProximaNova/`.
+The bottom-right timestamp is snapshot generation time in the configured UTC
+offset, not confirmation of a physical panel update. No face or device name is
+rendered. The browser display previews these same images.
+
+Generated PNGs exist only in process memory: at most 32 MiB, with snapshots
+expiring after 24 hours or earlier under memory pressure. Fresh snapshots are
+reused for the refresh interval. Configuration changes invalidate reuse.
+Restarting LNbits clears the cache. Run this extension in a single worker;
+multiple workers would require a shared cache. No persistent image storage or
+background rendering task is used.
+
+The current overnight sleep behaviour is retained (eight hours for requests
+between 22:00 and midnight in the configured offset). Firmware must honour that
+interval and `next_page`; the initial gerty-v3 test firmware clamps intervals to
+300 seconds and does not yet rotate pages. For server-quantized images, disable
+firmware dithering. Future display profiles can separate dimensions and palette
+from the shared screen data; only the 960 × 540 e-paper profile is enabled today.

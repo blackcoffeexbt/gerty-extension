@@ -223,6 +223,16 @@
         <q-checkbox
           class="q-pl-md"
           size="xs"
+          v-model="formDialog.data.display_preferences.mempool_recommended_fees"
+          val="xs"
+          label="Mempool fees"
+          ><q-tooltip
+            >Displays recommended transaction fees from mempool.space</q-tooltip
+          ></q-checkbox
+        >
+        <q-checkbox
+          class="q-pl-md"
+          size="xs"
           v-model="formDialog.data.display_preferences.url_checker"
           val="xs"
           label="URL Checker"

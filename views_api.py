@@ -1,11 +1,13 @@
+import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from lnbits.core.crud import get_user
 from lnbits.core.models import WalletTypeInfo
 from lnbits.decorators import require_admin_key, require_invoice_key
-from loguru import logger
 
 from .crud import (
     create_gerty,
@@ -17,12 +19,13 @@ from .crud import (
 )
 from .helpers import (
     gerty_should_sleep,
-    get_next_update_time,
     get_satoshi,
     get_screen_data,
     get_screen_slug_by_index,
 )
+from .image_cache import image_cache
 from .models import CreateGerty, Gerty
+from .rendering import render_screen
 
 gerty_api_router = APIRouter()
 
@@ -101,54 +104,72 @@ async def api_gerty_satoshi():
     return await get_satoshi()
 
 
+@gerty_api_router.get("/api/v1/gerty/images/{revision}.png", name="gerty_image")
+async def api_gerty_image(revision: str):
+    snapshot = image_cache.get(revision)
+    if snapshot is None:
+        raise HTTPException(410, "Image expired; fetch the page manifest again.")
+    return Response(
+        snapshot.png,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "private, no-store",
+            "ETag": f'"{revision}"',
+        },
+    )
+
+
+@gerty_api_router.get("/api/v1/gerty/pages/{gerty_id}")
 @gerty_api_router.get("/api/v1/gerty/pages/{gerty_id}/{p}")
-async def api_gerty_json(gerty_id: str, p: int = 0):  # page number
+async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
     gerty = await get_gerty(gerty_id)
-
     if not gerty:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="Gerty does not exist."
-        )
-
-    display_preferences = json.loads(gerty.display_preferences)
-
-    enabled_screen_count = 0
-
-    enabled_screens = []
-
-    for screen_slug in display_preferences:
-        is_screen_enabled = display_preferences[screen_slug]
-        if is_screen_enabled:
-            enabled_screen_count += 1
-            enabled_screens.append(screen_slug)
-
-    logger.debug("Screens " + str(enabled_screens))
-    data = await get_screen_data(p, enabled_screens, gerty)
-
-    next_screen_number = 0 if ((p + 1) >= enabled_screen_count) else p + 1
-
-    # get the sleep time
-    sleep_time = gerty.refresh_time if gerty.refresh_time else 300
-    utc_offset = gerty.utc_offset if gerty.utc_offset else 0
+        raise HTTPException(404, "Gerty does not exist.")
+    preferences = json.loads(gerty.display_preferences)
+    screens = [slug for slug, enabled in preferences.items() if enabled]
+    if not screens:
+        raise HTTPException(422, "Enable at least one screen.")
+    if p < 0 or p >= len(screens):
+        raise HTTPException(404, "Page does not exist.")
+    slug = get_screen_slug_by_index(p, screens)
+    utc_offset = gerty.utc_offset or 0
+    refresh = max(30, gerty.refresh_time or 300)
     if gerty_should_sleep(utc_offset):
-        sleep_time_hours = 8
-        sleep_time = 60 * 60 * sleep_time_hours
-
-    return {
-        "settings": {
-            "refreshTime": sleep_time,
-            "requestTimestamp": get_next_update_time(sleep_time, utc_offset),
-            "nextScreenNumber": next_screen_number,
-            "showTextBoundRect": False,
-            "name": gerty.name,
-        },
-        "screen": {
-            "slug": get_screen_slug_by_index(p, enabled_screens),
-            "group": get_screen_slug_by_index(p, enabled_screens),
-            "title": data["title"],
-            "areas": data["areas"],
-        },
-    }
+        refresh = 8 * 60 * 60
+    # Include configuration so edits invalidate snapshots immediately.
+    key = f"{gerty_id}:{p}:epaper_960x540:{gerty.json()}"
+    async with image_cache.lock:
+        snapshot = image_cache.fresh(key)
+        if snapshot is None:
+            try:
+                data = await get_screen_data(p, screens, gerty)
+            except Exception as exc:
+                raise HTTPException(
+                    503, "Screen data temporarily unavailable."
+                ) from exc
+            updated = datetime.now(timezone.utc) + timedelta(hours=utc_offset)
+            png = await asyncio.to_thread(
+                render_screen, data, slug, updated.strftime("%H:%M")
+            )
+            snapshot = image_cache.put(key, png, refresh)
+    return Response(
+        content=json.dumps(
+            {
+                "schema_version": 1,
+                "image_url": str(
+                    request.url_for("gerty_image", revision=snapshot.revision)
+                ),
+                "image_revision": snapshot.revision,
+                "refresh_seconds": refresh,
+                "page": p,
+                "page_count": len(screens),
+                "next_page": (p + 1) % len(screens),
+                "screen_name": slug,
+            }
+        ),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 ###########CACHED MEMPOOL##############
