@@ -145,7 +145,9 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
         raise HTTPException(404, "Page does not exist.")
     slug = get_screen_slug_by_index(p, screens)
     utc_offset = gerty.utc_offset or 0
-    refresh = max(30, gerty.refresh_time or 300)
+    refresh = gerty.refresh_time if gerty.refresh_time is not None else 300
+    if refresh <= 0:
+        raise HTTPException(422, "Refresh time must be a positive number of seconds.")
     if gerty_should_sleep(utc_offset):
         refresh = 8 * 60 * 60
     # Include configuration so edits invalidate snapshots immediately.

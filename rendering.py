@@ -1,5 +1,6 @@
 """Server-side display rendering. Generated PNGs are never written to disk."""
 
+import re
 from dataclasses import dataclass
 from io import BytesIO
 from math import ceil
@@ -105,18 +106,71 @@ def render_screen(data, slug, updated, profile=EPAPER):
                 item["size"] += 2
             elif slug in QUOTE_SCREENS:
                 item["size"] += 4
+        if slug in DASHBOARDS or fees:
+            # Keep card labels at a consistent height, independently of values
+            # that may wrap to several lines or have comparison notes.
+            label = items.pop(0)
+            label_size = max(24, int(label["size"] * 1.6))
+            label_font = ImageFont.truetype(str(BOLD_FONT), label_size)
+            while (
+                draw.textlength(label["value"], font=label_font) > width
+                and label_size > 14
+            ):
+                label_size -= 1
+                label_font = ImageFont.truetype(str(BOLD_FONT), label_size)
+            draw.text(
+                (left + width / 2, panel_top + 30),
+                label["value"],
+                font=label_font,
+                fill=0,
+                anchor="mt",
+            )
+            for dot_x in range(int(left), int(left + width), 5):
+                draw.point((dot_x, panel_top + 60), fill=0)
+            y = panel_top + 74
+            height = panel_bottom - y - 16
+            if items:
+                items[0]["size"] = max(
+                    items[0]["size"], 28 if len(str(items[0]["value"])) > 22 else 32
+                )
+        if (
+            slug == "dashboard_onchain"
+            and index == 2
+            and items
+            and " at " in str(items[0]["value"])
+        ):
+            date, time = str(items[0]["value"]).split(" at ", 1)
+            items = [{"value": date, "size": 28}, {"value": time, "size": 28}]
+        if slug == "lnbits_wallets_balance" and items:
+            items[0]["value"] = str(items[0]["value"]).removesuffix("'s Wallet")
+        if fees and items:
+            value, unit = str(items[0]["value"]).split(" ", 1)
+            items = [{"value": value, "size": 40}, {"value": unit, "size": 16}]
         scale = 1.6
         while True:
             lines = []
+            item_starts = []
             for item_index, item in enumerate(items):
+                item_starts.append(len(lines))
                 font_path = (
-                    BOLD_FONT if item_index == 0 and slug not in QUOTE_SCREENS else FONT
+                    BOLD_FONT
+                    if item_index == 0
+                    and slug not in QUOTE_SCREENS
+                    and slug not in DASHBOARDS
+                    else FONT
                 )
                 font = ImageFont.truetype(
                     str(font_path), max(10, int(item["size"] * scale))
                 )
                 # Wrap by measured pixels, including exceptionally long words.
-                words = str(item["value"]).replace("\n", " ").split()
+                value = str(item["value"]).replace("\n", " ")
+                # Keep duration values with their units when a line wraps.
+                value = re.sub(
+                    r"(\d+) (days?|hours?|minutes?|seconds?)\b",
+                    lambda match: match[1] + "\u00a0" + match[2],
+                    value,
+                )
+                words = [word for word in value.split(" ") if word]
                 line = ""
                 for word in words:
                     candidate = f"{line} {word}".strip()
@@ -133,11 +187,36 @@ def render_screen(data, slug, updated, profile=EPAPER):
                         line += char
                 if line:
                     lines.append((line, font))
+                # Avoid leaving a very short final line in a quotation.
+                if (
+                    slug in QUOTE_SCREENS
+                    and item_index == 0
+                    and len(lines) - item_starts[-1] > 1
+                    and draw.textlength(lines[-1][0], font=font) < width * 0.3
+                ):
+                    tail = (lines[-2][0] + " " + lines[-1][0]).split(" ")
+                    candidates = []
+                    for split in range(1, len(tail)):
+                        first, last = " ".join(tail[:split]), " ".join(tail[split:])
+                        first_width = draw.textlength(first, font=font)
+                        last_width = draw.textlength(last, font=font)
+                        if max(first_width, last_width) <= width:
+                            candidates.append(
+                                (abs(first_width - last_width), first, last)
+                            )
+                    if candidates:
+                        _, first, last = min(candidates)
+                        lines[-2:] = [(first, font), (last, font)]
             line_heights = [
                 draw.textbbox((0, 0), line, font=font, anchor="mt")[3]
                 for line, font in lines
             ]
-            gaps = [font.size * 0.3 for _, font in lines[:-1]]
+            gaps = [
+                max(12, font.size * 0.45) if i + 1 in item_starts else font.size * 0.35
+                for i, (_, font) in enumerate(lines[:-1])
+            ]
+            if slug in QUOTE_SCREENS and len(item_starts) > 1 and item_starts[1] > 0:
+                gaps[item_starts[1] - 1] = 28
             total = sum(line_heights) + sum(gaps)
             if total <= height or scale <= 0.3:
                 break

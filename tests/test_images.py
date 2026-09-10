@@ -5,6 +5,7 @@ import sys
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 
@@ -73,7 +74,8 @@ def test_stale_snapshot_still_downloadable():
     assert cache.get(snapshot.revision) is snapshot
 
 
-def test_manifest_and_image_routes(monkeypatch):
+@pytest.mark.parametrize("refresh", [5, 900])
+def test_manifest_and_image_routes(monkeypatch, refresh):
     import asyncio
     from types import SimpleNamespace
 
@@ -86,7 +88,7 @@ def test_manifest_and_image_routes(monkeypatch):
         return SimpleNamespace(
             display_preferences='{"dashboard": true, "quote": true}',
             utc_offset=0,
-            refresh_time=300,
+            refresh_time=refresh,
             json=lambda: '{"id":"test"}',
         )
 
@@ -94,6 +96,7 @@ def test_manifest_and_image_routes(monkeypatch):
         return {"title": "Device name", "areas": []}
 
     monkeypatch.setattr(views_api, "get_gerty", get_gerty)
+    monkeypatch.setattr(views_api, "gerty_should_sleep", lambda _: False)
     monkeypatch.setattr(views_api, "get_screen_data", get_data)
     monkeypatch.setattr(views_api, "image_cache", cache_module.ImageCache())
     app = FastAPI()
@@ -107,6 +110,7 @@ def test_manifest_and_image_routes(monkeypatch):
             assert response.status_code == 200
             manifest = response.json()
             assert manifest["page"] == 0
+            assert manifest["refresh_seconds"] == refresh
             assert manifest["next_page"] == 1
             assert manifest["screen_name"] == "dashboard"
             repeated = await client.get("/gerty/api/v1/gerty/pages/test/0")

@@ -72,8 +72,9 @@ background rendering task is used.
 
 The current overnight sleep behaviour is retained (eight hours for requests
 between 22:00 and midnight in the configured offset). Firmware must honour that
-interval and `next_page`; the initial gerty-v3 test firmware clamps intervals to
-300 seconds and does not yet rotate pages. For server-quantized images, disable
+interval and `next_page`. Positive configured intervals are returned without
+a 30–300 second clamp; the updated gerty-v3 firmware honours them after reflashing.
+For server-quantized images, disable
 firmware dithering. Future display profiles can separate dimensions and palette
 from the shared screen data; only the 960 × 540 e-paper profile is enabled today.
 
