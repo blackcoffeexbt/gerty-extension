@@ -57,7 +57,8 @@ can reach (not localhost). Treat device URLs as private bearer links because
 images may contain wallet balances.
 
 Images are 960 × 540 landscape, non-interlaced 8-bit grayscale PNGs quantized to
-16 levels. The renderer uses Proxima Nova Regular from `fonts/ProximaNova/`.
+16 levels. The renderer uses Pixel Operator and Pixel Operator Bold from
+`fonts/PixelOperator/`, with the bundled CC0 licence in `LICENSE.txt`.
 The bottom-right timestamp is snapshot generation time in the configured UTC
 offset, not confirmation of a physical panel update. No face or device name is
 rendered. The browser display previews these same images.
