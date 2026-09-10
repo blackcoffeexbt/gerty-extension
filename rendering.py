@@ -64,7 +64,10 @@ def render_screen(data, slug, updated, profile=EPAPER):
     draw.rectangle((19, 13, 42, 36), fill=255, outline=0, width=2)
     stipple(draw, (22, 16, 40, 21))
     draw.line((24, 27, 36, 27), fill=0, width=2)
-    draw.text((54, 13), title, font=ImageFont.truetype(str(BOLD_FONT), 36), fill=0)
+    title_size = 36 if slug in DASHBOARDS or slug == "mempool_recommended_fees" else 30
+    draw.text(
+        (54, 13), title, font=ImageFont.truetype(str(BOLD_FONT), title_size), fill=0
+    )
     draw.line((14, 55, profile.width - 15, 55), fill=0, width=2)
     stipple(draw, (14, 59, profile.width - 14, 64))
     empty_message = (
@@ -161,7 +164,8 @@ def render_screen(data, slug, updated, profile=EPAPER):
                 items = [
                     {"value": value, "size": 48},
                     {"value": unit, "size": 20},
-                ] + items[1:]
+                    *items[1:],
+                ]
         if (
             slug == "dashboard_onchain"
             and index == 2

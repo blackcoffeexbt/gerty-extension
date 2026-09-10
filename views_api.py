@@ -2,7 +2,6 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -10,6 +9,7 @@ from lnbits.core.crud import get_user
 from lnbits.core.models import WalletTypeInfo
 from lnbits.decorators import require_admin_key, require_invoice_key
 
+from .block_explorer import get_block_explorer_data, render_block_explorer
 from .crud import (
     create_gerty,
     delete_gerty,
@@ -29,7 +29,6 @@ from .models import CreateGerty, Gerty
 from .rendering import render_screen
 
 gerty_api_router = APIRouter()
-BLOCK_EXPLORER_IMAGE = Path(__file__).parent / "static/blocks.png"
 
 
 @gerty_api_router.get("/api/v1/gerty", status_code=HTTPStatus.OK)
@@ -107,12 +106,23 @@ async def api_gerty_satoshi():
 
 
 @gerty_api_router.get("/api/v1/gerty/block-explorer", name="gerty_block_explorer")
-async def api_gerty_block_explorer():
-    """Return the bundled 960x540 block explorer rendering example."""
+async def api_gerty_block_explorer(
+    key_info: WalletTypeInfo = Depends(require_invoice_key),
+):
+    """Render current Block explorer data; devices use their Gerty page URL."""
+    try:
+        data = await get_block_explorer_data()
+    except Exception as exc:
+        raise HTTPException(
+            503, "Block explorer data temporarily unavailable."
+        ) from exc
+    png = await asyncio.to_thread(
+        render_block_explorer, data, datetime.now(timezone.utc).strftime("%H:%M")
+    )
     return Response(
-        BLOCK_EXPLORER_IMAGE.read_bytes(),
+        png,
         media_type="image/png",
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -142,7 +152,9 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
     if not screens:
         raise HTTPException(422, "Enable at least one screen.")
     if p < 0 or p >= len(screens):
-        raise HTTPException(404, "Page does not exist.")
+        # Saved hardware page numbers can become stale after disabling screens.
+        # Continue the rotation at the first enabled page.
+        p = 0
     slug = get_screen_slug_by_index(p, screens)
     utc_offset = gerty.utc_offset or 0
     refresh = gerty.refresh_time if gerty.refresh_time is not None else 300
@@ -156,14 +168,20 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
         snapshot = image_cache.fresh(key)
         if snapshot is None:
             try:
-                data = await get_screen_data(p, screens, gerty)
+                data = (
+                    await get_block_explorer_data()
+                    if slug == "block_explorer"
+                    else await get_screen_data(p, screens, gerty)
+                )
             except Exception as exc:
                 raise HTTPException(
                     503, "Screen data temporarily unavailable."
                 ) from exc
             updated = datetime.now(timezone.utc) + timedelta(hours=utc_offset)
             if slug == "block_explorer":
-                png = BLOCK_EXPLORER_IMAGE.read_bytes()
+                png = await asyncio.to_thread(
+                    render_block_explorer, data, updated.strftime("%H:%M")
+                )
             else:
                 png = await asyncio.to_thread(
                     render_screen, data, slug, updated.strftime("%H:%M")

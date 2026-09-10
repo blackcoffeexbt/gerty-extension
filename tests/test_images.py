@@ -118,12 +118,15 @@ def test_manifest_and_image_routes(monkeypatch, refresh):
             image = await client.get(manifest["image_url"])
             assert image.headers["content-type"] == "image/png"
             Image.open(BytesIO(image.content)).verify()
-            assert (
-                await client.get("/gerty/api/v1/gerty/pages/test/-1")
-            ).status_code == 404
-            assert (
-                await client.get("/gerty/api/v1/gerty/pages/test/2")
-            ).status_code == 404
+            for requested in (-1, 2, 99):
+                fallback = await client.get(
+                    f"/gerty/api/v1/gerty/pages/test/{requested}"
+                )
+                assert fallback.status_code == 200
+                assert fallback.json()["page"] == 0
+                assert fallback.json()["next_page"] == 1
+                assert fallback.json()["screen_name"] == "dashboard"
+                assert fallback.json()["image_revision"] == manifest["image_revision"]
             last = await client.get("/gerty/api/v1/gerty/pages/test/1")
             assert last.json()["next_page"] == 0
             views_api.image_cache.max_age = 0
@@ -132,7 +135,7 @@ def test_manifest_and_image_routes(monkeypatch, refresh):
     asyncio.run(check())
 
 
-def test_block_explorer_example_endpoint():
+def test_block_explorer_live_endpoint(monkeypatch):
     import asyncio
 
     import httpx
@@ -140,7 +143,19 @@ def test_block_explorer_example_endpoint():
 
     from .. import views_api
 
+    async def fetch():
+        return {
+            "height": 100,
+            "blocks": [],
+            "estimates": {},
+            "histogram": [],
+            "intervals": [],
+        }
+
+    monkeypatch.setattr(views_api, "get_block_explorer_data", fetch)
+
     app = FastAPI()
+    app.dependency_overrides[views_api.require_invoice_key] = lambda: None
     app.include_router(views_api.gerty_api_router, prefix="/gerty")
 
     async def check():

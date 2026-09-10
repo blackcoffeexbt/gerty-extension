@@ -35,7 +35,10 @@ What does Gerty show?
 ## Image display API
 
 `GET /gerty/api/v1/gerty/pages/{id}` returns page zero. Append `/{page}`
-for another zero-based enabled page. The old text-area response is replaced by:
+for another zero-based enabled page. Requests outside the enabled page range
+return the first enabled page, with its actual `page`, `screen_name`, and
+`next_page`, so devices recover after screens are disabled. If no screens are
+enabled, the API returns 422. The old text-area response is replaced by:
 
 ```json
 {
@@ -78,5 +81,13 @@ For server-quantized images, disable
 firmware dithering. Future display profiles can separate dimensions and palette
 from the shared screen data; only the 960 × 540 e-paper profile is enabled today.
 
-The example endpoint `GET /gerty/api/v1/gerty/block-explorer` returns the bundled
-960 × 540 block explorer PNG at `static/blocks.png`.
+The Block explorer toggle adds a live `block_explorer` page. It uses the same
+LNbits services as `/blockexplorer/api/v1/tip`, `/fees`, and `/blocks`, without
+making HTTP requests back to the server or forwarding credentials. Block explorer
+must be enabled in LNbits settings. Its image shows confirmation-target fees,
+recent blocks, block intervals, and mempool virtual size by fee-rate range.
+Fee estimates are converted from BTC/kB to sat/vB; chart sizes use decimal MvB.
+Unavailable fee estimates and missing interval history are shown explicitly.
+The normal page cache and refresh interval apply; no static example data is used.
+The standalone `GET /gerty/api/v1/gerty/block-explorer` also renders live data
+and requires an LNbits invoice/read key. Hardware should use the Gerty page URL.
