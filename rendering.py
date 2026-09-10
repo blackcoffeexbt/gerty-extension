@@ -64,7 +64,7 @@ def render_screen(data, slug, updated, profile=EPAPER):
     draw.rectangle((19, 13, 42, 36), fill=255, outline=0, width=2)
     stipple(draw, (22, 16, 40, 21))
     draw.line((24, 27, 36, 27), fill=0, width=2)
-    draw.text((54, 13), title, font=ImageFont.truetype(str(BOLD_FONT), 30), fill=0)
+    draw.text((54, 13), title, font=ImageFont.truetype(str(BOLD_FONT), 36), fill=0)
     draw.line((14, 55, profile.width - 15, 55), fill=0, width=2)
     stipple(draw, (14, 59, profile.width - 14, 64))
     empty_message = (
@@ -110,7 +110,15 @@ def render_screen(data, slug, updated, profile=EPAPER):
             # Keep card labels at a consistent height, independently of values
             # that may wrap to several lines or have comparison notes.
             label = items.pop(0)
-            label_size = max(24, int(label["size"] * 1.6))
+            label["value"] = {
+                "Progress through current epoch": "Epoch progress",
+                "Date of next adjustment": "Next adjustment",
+                "Time to next difficulty adjustment": "Time to adjustment",
+                "Estimated difficulty change": "Difficulty change",
+                "Average Channel Capacity": "Average channel",
+                "Current block height": "Block height",
+            }.get(label["value"], label["value"])
+            label_size = max(36, int(label["size"] * 1.6))
             label_font = ImageFont.truetype(str(BOLD_FONT), label_size)
             while (
                 draw.textlength(label["value"], font=label_font) > width
@@ -131,8 +139,29 @@ def render_screen(data, slug, updated, profile=EPAPER):
             height = panel_bottom - y - 16
             if items:
                 items[0]["size"] = max(
-                    items[0]["size"], 28 if len(str(items[0]["value"])) > 22 else 32
+                    items[0]["size"], 38 if len(str(items[0]["value"])) > 22 else 48
                 )
+            for note in items[1:]:
+                note["size"] = max(note["size"], 18)
+            if slug == "dashboard_mining" and index == 2 and items:
+                value = str(items[0]["value"])
+                for unit, short in (
+                    ("days", "d"),
+                    ("day", "d"),
+                    ("hours", "h"),
+                    ("hour", "h"),
+                    ("minutes", "m"),
+                    ("minute", "m"),
+                ):
+                    value = value.replace(" " + unit, short)
+                items[0]["value"] = value.replace(",", "")
+                items[0]["size"] = 48
+            if slug == "lightning_dashboard" and index >= 2 and items:
+                value, unit = str(items[0]["value"]).rsplit(" ", 1)
+                items = [
+                    {"value": value, "size": 48},
+                    {"value": unit, "size": 20},
+                ] + items[1:]
         if (
             slug == "dashboard_onchain"
             and index == 2
@@ -140,12 +169,12 @@ def render_screen(data, slug, updated, profile=EPAPER):
             and " at " in str(items[0]["value"])
         ):
             date, time = str(items[0]["value"]).split(" at ", 1)
-            items = [{"value": date, "size": 28}, {"value": time, "size": 28}]
+            items = [{"value": date, "size": 34}, {"value": time, "size": 34}]
         if slug == "lnbits_wallets_balance" and items:
             items[0]["value"] = str(items[0]["value"]).removesuffix("'s Wallet")
         if fees and items:
             value, unit = str(items[0]["value"]).split(" ", 1)
-            items = [{"value": value, "size": 40}, {"value": unit, "size": 16}]
+            items = [{"value": value, "size": 48}, {"value": unit, "size": 20}]
         scale = 1.6
         while True:
             lines = []
@@ -212,7 +241,11 @@ def render_screen(data, slug, updated, profile=EPAPER):
                 for line, font in lines
             ]
             gaps = [
-                max(12, font.size * 0.45) if i + 1 in item_starts else font.size * 0.35
+                (
+                    (12 if slug in DASHBOARDS or fees else max(12, font.size * 0.45))
+                    if i + 1 in item_starts
+                    else font.size * 0.35
+                )
                 for i, (_, font) in enumerate(lines[:-1])
             ]
             if slug in QUOTE_SCREENS and len(item_starts) > 1 and item_starts[1] > 0:
