@@ -10,6 +10,7 @@ from lnbits.core.models import WalletTypeInfo
 from lnbits.decorators import require_admin_key, require_invoice_key
 
 from .block_explorer import get_block_explorer_data, render_block_explorer
+from .colour_rendering import render_colour_screen
 from .crud import (
     create_gerty,
     delete_gerty,
@@ -18,6 +19,7 @@ from .crud import (
     get_mempool_info,
     update_gerty,
 )
+from .display_settings import DISPLAY_PROFILES, get_display_settings
 from .helpers import (
     gerty_should_sleep,
     get_satoshi,
@@ -148,7 +150,16 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
     if not gerty:
         raise HTTPException(404, "Gerty does not exist.")
     preferences = json.loads(gerty.display_preferences)
-    screens = [slug for slug, enabled in preferences.items() if enabled]
+    try:
+        device_type, colour_theme = get_display_settings(preferences)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    profile = DISPLAY_PROFILES[device_type]
+    screens = [
+        slug
+        for slug, enabled in preferences.items()
+        if slug != "_display" and enabled is True
+    ]
     if not screens:
         raise HTTPException(422, "Enable at least one screen.")
     if p < 0 or p >= len(screens):
@@ -163,7 +174,7 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
     if gerty_should_sleep(utc_offset):
         refresh = 8 * 60 * 60
     # Include configuration so edits invalidate snapshots immediately.
-    key = f"{gerty_id}:{p}:epaper_960x540:{gerty.json()}"
+    key = f"{gerty_id}:{p}:{device_type}:{colour_theme}:{gerty.json()}"
     async with image_cache.lock:
         snapshot = image_cache.fresh(key)
         if snapshot is None:
@@ -178,7 +189,15 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
                     503, "Screen data temporarily unavailable."
                 ) from exc
             updated = datetime.now(timezone.utc) + timedelta(hours=utc_offset)
-            if slug == "block_explorer":
+            if device_type == "colour_480x320":
+                png = await asyncio.to_thread(
+                    render_colour_screen,
+                    data,
+                    slug,
+                    updated.strftime("%H:%M"),
+                    colour_theme,
+                )
+            elif slug == "block_explorer":
                 png = await asyncio.to_thread(
                     render_block_explorer, data, updated.strftime("%H:%M")
                 )
@@ -200,6 +219,12 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
                 "page_count": len(screens),
                 "next_page": (p + 1) % len(screens),
                 "screen_name": slug,
+                "device_type": device_type,
+                "width": profile["width"],
+                "height": profile["height"],
+                "colour_theme": (
+                    colour_theme if device_type == "colour_480x320" else None
+                ),
             }
         ),
         media_type="application/json",

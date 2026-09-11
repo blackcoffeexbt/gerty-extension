@@ -168,6 +168,23 @@
           label="Name"
           placeholder="Son of Gerty"
         ></q-input>
+        <q-select
+          filled
+          dense
+          emit-value
+          map-options
+          v-model="formDialog.data.display_preferences._display.profile"
+          :options="[{label: 'Epaper 960 x 540', value: 'epaper_960x540'}, {label: 'Colour 480 x 320', value: 'colour_480x320'}]"
+          label="Device type and screen resolution"
+        ></q-select>
+        <q-select
+          v-if="formDialog.data.display_preferences._display.profile === 'colour_480x320'"
+          filled
+          dense
+          v-model="formDialog.data.display_preferences._display.theme"
+          :options="['Cypherpunk', 'Bright day', 'Orange Pill']"
+          label="Colour theme"
+        ></q-select>
         <q-checkbox
           class="q-pl-md"
           size="xs"
@@ -422,6 +439,7 @@
             exchange: 'USD',
             utc_offset: new Date().getTimezoneOffset(),
             display_preferences: {
+              _display: {profile: 'epaper_960x540', theme: 'Orange Pill'},
               dashboard: false,
               fun_satoshi_quotes: false,
               fun_exchange_market_rate: false,
@@ -490,7 +508,9 @@
           urls: [],
           mempool_endpoint: 'https://mempool.space',
           refresh_time: 300,
-          display_preferences: {}
+          display_preferences: {
+            _display: {profile: 'epaper_960x540', theme: 'Orange Pill'}
+          }
         }
       },
       getGertys() {
@@ -527,6 +547,10 @@
         )) {
           vm.formDialog.data.display_preferences[key] = false
         }
+        this.formDialog.data.display_preferences._display = {
+          profile: 'epaper_960x540',
+          theme: 'Orange Pill'
+        }
       },
       updateformDialog: async function (formId = null) {
         this.clearGertySettings()
@@ -544,6 +568,11 @@
           this.formDialog.data.display_preferences = JSON.parse(
             gerty.display_preferences
           )
+          this.formDialog.data.display_preferences._display = {
+            profile: 'epaper_960x540',
+            theme: 'Orange Pill',
+            ...(this.formDialog.data.display_preferences._display || {})
+          }
         }
         this.formDialog.show = true
       },
