@@ -137,51 +137,62 @@ def render_colour_screen(data, slug, updated, theme="Orange Pill"):
 def _block_dashboard(data, draw, text, card, palette):
     from .block_explorer import smooth_points
 
-    # Two rows replace the eight narrow cards of the larger e-paper layout.
+    # Match the e-paper layout: fee estimates and recent blocks share one row.
     now = datetime.now(timezone.utc).timestamp()
     for i, target in enumerate((144, 6, 3, 1)):
-        left = 8 + i * 118
-        card((left, 38, left + 110, 92))
+        left = 4 + i * 59
+        card((left, 38, left + 55, 92))
         text(
-            left + 55,
-            45,
-            f"{target} block" + ("s" if target != 1 else ""),
-            18,
+            left + 27,
+            44,
+            str(target),
+            13,
             "muted",
             True,
             "mt",
         )
         rate = data["estimates"].get(str(target))
         text(
-            left + 55,
-            65,
-            f"{rate:.1f} sat/vB" if rate is not None else "N/A",
-            21,
+            left + 27,
+            62,
+            f"{rate:.1f}" if rate is not None else "N/A",
+            14,
             "accent",
             anchor="mt",
         )
+        text(left + 27, 78, "sat/vB", 8, "muted", anchor="mt")
     for i, block in enumerate(data["blocks"][:4]):
-        left = 8 + i * 118
-        card((left, 99, left + 110, 144))
-        text(left + 55, 105, f"#{block['height']}", 22, "text", True, "mt")
+        # Leave breathing room around the chain-tip divider.
+        left = 9 + (i + 4) * 59
+        card((left, 38, left + 55, 92))
+        text(left + 27, 44, f"#{block['height']}", 12, "text", True, "mt")
         age = max(0, int((now - block["timestamp"]) / 60))
-        text(left + 55, 125, f"{age} min ago", 17, "muted", anchor="mt")
-    draw.line((8, 96, 472, 96), fill=palette["secondary"])
-    card((8, 151, 236, 296))
-    card((244, 151, 472, 296))
-    text(18, 160, "Block intervals", 22, "text", True)
-    text(254, 160, "Mempool fees", 22, "text", True)
+        text(left + 27, 63, f"{age}m", 13, "muted", anchor="mt")
+        text(left + 27, 78, "ago", 8, "muted", anchor="mt")
+    # Divider marks the chain tip between fee targets and recent blocks.
+    # Keep the chain-tip marker the same height as the cards, with breathing
+    # room above and below instead of extending into the chart panels.
+    draw.line((240, 31, 240, 99), fill=palette["secondary"], width=2)
+    lower_top, lower_bottom = 112, 296
+    card((8, lower_top, 236, lower_bottom))
+    card((244, lower_top, 472, lower_bottom))
+    text(18, 121, "Block intervals", 22, "text", True)
+    text(254, 121, "Mempool fees", 22, "text", True)
     values = list(reversed(data["intervals"]))
     low = min(0, min((v for _, v in values), default=0))
     high = max(15, max((v for _, v in values), default=10))
-    for y in (200, 230, 260):
+    for y in (174, 218, 262):
         draw.line((34, y, 224, y), fill=palette["border"])
         draw.line((268, y, 458, y), fill=palette["border"])
-    target_y = 262 - (10 - low) / (high - low) * 64
+    chart_top, chart_bottom = 174, 262
+    target_y = chart_bottom - (10 - low) / (high - low) * (chart_bottom - chart_top)
     for x in range(34, 224, 10):
         draw.line((x, target_y, x + 5, target_y), fill=palette["secondary"])
     points = [
-        (34 + i * 190 / max(1, len(values) - 1), 262 - (v - low) / (high - low) * 64)
+        (
+            34 + i * 190 / max(1, len(values) - 1),
+            chart_bottom - (v - low) / (high - low) * (chart_bottom - chart_top),
+        )
         for i, (_, v) in enumerate(values)
     ]
     if len(points) > 1:
@@ -215,7 +226,13 @@ def _block_dashboard(data, draw, text, card, palette):
         x = 270 + i * 32
         if size:
             draw.rectangle(
-                (x, 262 - size / maximum * 64, x + 21, 262), fill=palette["accent"]
+                (
+                    x,
+                    chart_bottom - size / maximum * (chart_bottom - chart_top),
+                    x + 21,
+                    chart_bottom,
+                ),
+                fill=palette["accent"],
             )
         text(
             x + 10,
