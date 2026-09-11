@@ -22,6 +22,15 @@ class DisplayProfile:
 EPAPER = DisplayProfile()
 DASHBOARDS = {"dashboard_onchain", "dashboard_mining", "lightning_dashboard"}
 CENTRED_STATS = {"onchain_block_height", "fun_exchange_market_rate"}
+SINGLE_STATS = CENTRED_STATS | {
+    "onchain_difficulty_epoch_progress",
+    "onchain_difficulty_retarget_date",
+    "onchain_difficulty_blocks_remaining",
+    "onchain_difficulty_epoch_time_remaining",
+    "mining_current_hash_rate",
+    "mining_current_difficulty",
+    "mempool_tx_count",
+}
 QUOTE_SCREENS = {"fun_satoshi_quotes"}
 SCREEN_TITLES = {
     "dashboard": "Bitcoin overview",
@@ -109,6 +118,8 @@ def render_screen(data, slug, updated, profile=EPAPER):
                 item["size"] += 2
             elif slug in QUOTE_SCREENS:
                 item["size"] += 4
+            if slug in SINGLE_STATS:
+                item["size"] *= 2
         if slug in DASHBOARDS or fees:
             # Keep card labels at a consistent height, independently of values
             # that may wrap to several lines or have comparison notes.
@@ -195,6 +206,15 @@ def render_screen(data, slug, updated, profile=EPAPER):
                 font = ImageFont.truetype(
                     str(font_path), max(10, int(item["size"] * scale))
                 )
+                # A large statistic must remain readable as a single value,
+                # rather than splitting its digits across lines.
+                if slug in SINGLE_STATS and item_index == 1:
+                    value_width = draw.textlength(str(item["value"]), font=font)
+                    if value_width > width:
+                        font = ImageFont.truetype(
+                            str(font_path),
+                            max(10, int(font.size * width / value_width)),
+                        )
                 # Wrap by measured pixels, including exceptionally long words.
                 value = str(item["value"]).replace("\n", " ")
                 # Keep duration values with their units when a line wraps.
