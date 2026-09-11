@@ -34,6 +34,32 @@ What does Gerty show?
 
 ## Image display API
 
+Choose **Device type and screen resolution** in Gerty settings:
+
+- **Epaper 960 x 540** (default): 16-level grayscale PNG.
+- **Colour 480 x 320**: native RGB PNG layouts for the Guition JC3248W535.
+
+Colour displays offer **Cypherpunk**, **Bright day**, and **Orange Pill**.
+Their named colour-role dictionaries live in `display_settings.py`.
+The selection is stored inside the existing JSON `display_preferences` field:
+
+```json
+{
+  "onchain_block_height": true,
+  "block_explorer": true,
+  "_display": {
+    "profile": "colour_480x320",
+    "theme": "Orange Pill"
+  }
+}
+```
+
+The page API returns `device_type` (`epaper_960x540` or `colour_480x320`),
+`width`, `height`, and `colour_theme` (null for e-paper). Its `image_url` serves
+the selected device's image. Display settings do not count as enabled pages.
+Changing profile or theme invalidates the cached snapshot. Old preferences
+without `_display` continue to use e-paper. No database migration is needed.
+
 `GET /gerty/api/v1/gerty/pages/{id}` returns page zero. Append `/{page}`
 for another zero-based enabled page. Requests outside the enabled page range
 return the first enabled page, with its actual `page`, `screen_name`, and
@@ -59,7 +85,7 @@ origin: configure LNbits/proxy forwarding correctly and use a hostname the devic
 can reach (not localhost). Treat device URLs as private bearer links because
 images may contain wallet balances.
 
-Images are 960 × 540 landscape, non-interlaced 8-bit grayscale PNGs quantized to
+E-paper images are 960 × 540 landscape, non-interlaced 8-bit grayscale PNGs quantized to
 16 levels. The renderer uses Pixel Operator and Pixel Operator Bold from
 `fonts/PixelOperator/`, with the bundled CC0 licence in `LICENSE.txt`.
 The bottom-right timestamp is snapshot generation time in the configured UTC
@@ -79,7 +105,7 @@ interval and `next_page`. Positive configured intervals are returned without
 a 30–300 second clamp; the updated gerty-v3 firmware honours them after reflashing.
 For server-quantized images, disable
 firmware dithering. Future display profiles can separate dimensions and palette
-from the shared screen data; only the 960 × 540 e-paper profile is enabled today.
+from the shared screen data. Both display profiles use the same live data sources.
 
 The Block explorer toggle adds a live `block_explorer` page. It uses the same
 LNbits services as `/blockexplorer/api/v1/tip`, `/fees`, and `/blocks`, without

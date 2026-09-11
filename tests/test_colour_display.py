@@ -1,0 +1,112 @@
+import asyncio
+import json
+from io import BytesIO
+from types import SimpleNamespace
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from PIL import Image
+
+from .. import views_api
+from ..colour_rendering import render_colour_screen
+from ..display_settings import COLOUR_THEMES, get_display_settings
+from ..image_cache import ImageCache
+
+
+@pytest.mark.parametrize("theme", list(COLOUR_THEMES))
+@pytest.mark.parametrize(
+    "slug",
+    [
+        "fun_satoshi_quotes",
+        "dashboard_onchain",
+        "onchain_block_height",
+        "url_checker",
+        "lnbits_wallets_balance",
+        "block_explorer",
+    ],
+)
+def test_native_colour_images(theme, slug):
+    if slug == "block_explorer":
+        data = {
+            "height": 100,
+            "blocks": [],
+            "estimates": {},
+            "intervals": [(100, 12), (99, 5)],
+            "histogram": [(0.5, 1000000), (200, 1)],
+        }
+    else:
+        data = {
+            "title": "Onchain Data",
+            "areas": [
+                [
+                    {"value": "Current block height", "size": 20},
+                    {"value": "966,345", "size": 80},
+                ]
+            ],
+        }
+        if slug == "dashboard_onchain":
+            data["areas"] *= 4
+    png = render_colour_screen(data, slug, "12:34", theme)
+    image = Image.open(BytesIO(png))
+    assert image.size == (480, 320)
+    assert image.mode == "RGB"
+    assert len(png) < 2 * 1024 * 1024
+    assert len({image.getpixel((x, 0)) for x in range(480)}) == 1
+    r, g, b = image.getpixel((0, 0))
+    assert r != g or g != b
+
+
+def test_profile_defaults_and_invalid_theme():
+    assert get_display_settings({}) == ("epaper_960x540", "Orange Pill")
+    with pytest.raises(ValueError):
+        get_display_settings({"_display": {"theme": "unknown"}})
+
+
+def test_api_image_matches_device_and_theme(monkeypatch):
+    preferences = {
+        "onchain_block_height": True,
+        "_display": {"profile": "colour_480x320", "theme": "Cypherpunk"},
+    }
+
+    async def gerty(_):
+        return SimpleNamespace(
+            display_preferences=json.dumps(preferences),
+            utc_offset=0,
+            refresh_time=5,
+            json=lambda: json.dumps(preferences),
+        )
+
+    async def data(*_):
+        return {
+            "title": "",
+            "areas": [[{"value": "Height", "size": 20}, {"value": "100", "size": 80}]],
+        }
+
+    monkeypatch.setattr(views_api, "get_gerty", gerty)
+    monkeypatch.setattr(views_api, "get_screen_data", data)
+    monkeypatch.setattr(views_api, "image_cache", ImageCache())
+    app = FastAPI()
+    app.include_router(views_api.gerty_api_router, prefix="/gerty")
+
+    async def check():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            manifest = (await client.get("/gerty/api/v1/gerty/pages/test")).json()
+            assert manifest["device_type"] == "colour_480x320"
+            assert (manifest["width"], manifest["height"]) == (480, 320)
+            assert manifest["page_count"] == 1
+            png = (await client.get(manifest["image_url"])).content
+            assert Image.open(BytesIO(png)).mode == "RGB"
+            preferences["_display"]["theme"] = "Bright day"
+            changed = (await client.get("/gerty/api/v1/gerty/pages/test")).json()
+            assert changed["image_revision"] != manifest["image_revision"]
+            preferences["_display"]["profile"] = "epaper_960x540"
+            mono = (await client.get("/gerty/api/v1/gerty/pages/test")).json()
+            assert mono["device_type"] == "epaper_960x540"
+            png = (await client.get(mono["image_url"])).content
+            image = Image.open(BytesIO(png))
+            assert image.size == (960, 540) and image.mode == "L"
+
+    asyncio.run(check())
