@@ -103,7 +103,13 @@ def render_colour_screen(data, slug, updated, theme="Orange Pill"):
             items = []
             for j, item in enumerate(area):
                 value = str(item["value"]).replace("\n", " ")
-                if slug == "fun_satoshi_quotes":
+                if slug == "bitcoin_history":
+                    size, colour, bold = (
+                        (24, "accent", True)
+                        if j == 0
+                        else (21, "text", False) if j == 1 else (16, "muted", False)
+                    )
+                elif slug == "fun_satoshi_quotes":
                     size, colour, bold = (
                         (23, "text", False) if j == 0 else (19, "secondary", False)
                     )
@@ -127,7 +133,7 @@ def render_colour_screen(data, slug, updated, theme="Orange Pill"):
             fit(
                 items,
                 (left + 12, top + 12, right - 12, bottom - 12),
-                slug != "fun_satoshi_quotes",
+                slug not in {"fun_satoshi_quotes", "bitcoin_history"},
             )
     output = BytesIO()
     image.save(output, format="PNG")

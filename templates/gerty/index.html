@@ -188,6 +188,12 @@
         <q-checkbox
           class="q-pl-md"
           size="xs"
+          v-model="formDialog.data.display_preferences.bitcoin_history"
+          label="Bitcoin History"
+        ><q-tooltip>Bitcoin anniversaries for today. Skipped on days without an event; enable another screen as a fallback.</q-tooltip></q-checkbox>
+        <q-checkbox
+          class="q-pl-md"
+          size="xs"
           v-model="formDialog.data.display_preferences.fun_satoshi_quotes"
           val="xs"
           label="Satoshi Quotes"
@@ -442,6 +448,7 @@
               _display: {profile: 'epaper_960x540', theme: 'Orange Pill'},
               dashboard: false,
               fun_satoshi_quotes: false,
+              bitcoin_history: false,
               fun_exchange_market_rate: false,
               dashboard_onchain: false,
               mempool_recommended_fees: false,
@@ -568,6 +575,10 @@
           this.formDialog.data.display_preferences = JSON.parse(
             gerty.display_preferences
           )
+          this.formDialog.data.display_preferences = {
+            bitcoin_history: false,
+            ...this.formDialog.data.display_preferences
+          }
           this.formDialog.data.display_preferences._display = {
             profile: 'epaper_960x540',
             theme: 'Orange Pill',

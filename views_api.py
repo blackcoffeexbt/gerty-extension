@@ -9,6 +9,7 @@ from lnbits.core.crud import get_user
 from lnbits.core.models import WalletTypeInfo
 from lnbits.decorators import require_admin_key, require_invoice_key
 
+from .bitcoin_history import events_on, history_screen
 from .block_explorer import get_block_explorer_data, render_block_explorer
 from .colour_rendering import render_colour_screen
 from .crud import (
@@ -166,23 +167,42 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
         # Saved hardware page numbers can become stale after disabling screens.
         # Continue the rotation at the first enabled page.
         p = 0
-    slug = get_screen_slug_by_index(p, screens)
     utc_offset = gerty.utc_offset or 0
+    updated = datetime.now(timezone.utc) + timedelta(hours=utc_offset)
+    history_events = events_on(updated.date()) if "bitcoin_history" in screens else []
+    available = [
+        i
+        for i, screen in enumerate(screens)
+        if screen != "bitcoin_history" or history_events
+    ]
+    if not available:
+        raise HTTPException(
+            422,
+            "No screens available today. Enable another screen "
+            "for days without a history event.",
+        )
+    p = next((i for i in available if i >= p), available[0])
+    next_page = next((i for i in available if i > p), available[0])
+    slug = get_screen_slug_by_index(p, screens)
     refresh = gerty.refresh_time if gerty.refresh_time is not None else 300
     if refresh <= 0:
         raise HTTPException(422, "Refresh time must be a positive number of seconds.")
     if gerty_should_sleep(utc_offset):
         refresh = 8 * 60 * 60
     # Include configuration so edits invalidate snapshots immediately.
-    key = f"{gerty_id}:{p}:{device_type}:{colour_theme}:{gerty.json()}"
+    key = f"{gerty_id}:{p}:{device_type}:{colour_theme}:{updated.date()}:{gerty.json()}"
     async with image_cache.lock:
         snapshot = image_cache.fresh(key)
         if snapshot is None:
             try:
                 data = (
-                    await get_block_explorer_data()
-                    if slug == "block_explorer"
-                    else await get_screen_data(p, screens, gerty)
+                    history_screen(history_events, updated, refresh)
+                    if slug == "bitcoin_history"
+                    else (
+                        await get_block_explorer_data()
+                        if slug == "block_explorer"
+                        else await get_screen_data(p, screens, gerty)
+                    )
                 )
             except Exception as exc:
                 raise HTTPException(
@@ -217,7 +237,7 @@ async def api_gerty_json(request: Request, gerty_id: str, p: int = 0):
                 "refresh_seconds": refresh,
                 "page": p,
                 "page_count": len(screens),
-                "next_page": (p + 1) % len(screens),
+                "next_page": next_page,
                 "screen_name": slug,
                 "device_type": device_type,
                 "width": profile["width"],

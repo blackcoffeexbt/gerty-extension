@@ -31,7 +31,7 @@ SINGLE_STATS = CENTRED_STATS | {
     "mining_current_difficulty",
     "mempool_tx_count",
 }
-QUOTE_SCREENS = {"fun_satoshi_quotes"}
+QUOTE_SCREENS = {"fun_satoshi_quotes", "bitcoin_history"}
 SCREEN_TITLES = {
     "dashboard": "Bitcoin overview",
     "fun_satoshi_quotes": "Satoshi Nakamoto",
